@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clientes Registrados OLT</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-body: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --border-color: #e2e8f0;
+            --primary-blue: #2563eb;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); padding: 24px; }
+
+        .card {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* --- BARRA DE BÚSQUEDA --- */
+        .search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 12px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .search-box input {
+            padding: 8px 12px 8px 36px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.88rem;
+            outline: none;
+            width: 260px;
+            transition: all 0.2s;
+        }
+
+        .search-box input:focus {
+            border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        h2 { font-size: 1.1rem; font-weight: 600; color: #0f172a; display: flex; align-items: center; gap: 8px; }
+
+        .btn-refresh {
+            background: #0284c7; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 6px;
+        }
+        .btn-refresh:hover { background: #0369a1; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border-bottom: 1px solid var(--border-color); padding: 12px 14px; text-align: left; font-size: 0.9rem; }
+        th { background-color: #f1f5f9; color: #475569; font-weight: 600; }
+        tr:hover { background-color: #f8fafc; }
+
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .bg-success { background-color: #dcfce7; color: #15803d; }
+        .bg-danger { background-color: #fee2e2; color: #b91c1c; }
+        .bg-warning { background-color: #fef3c7; color: #b45309; }
+
+        .btn-action { background: #2563eb; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .btn-action:hover { background: #1d4ed8; }
+        
+        .btn-danger { background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        .btn-danger:hover { background: #dc2626; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="header-flex">
+            <h2><i class="fa-solid fa-users" style="color: var(--primary-blue);"></i> Clientes Registrados (Monitoreo Zabbix)</h2>
+            
+            <div class="header-actions">
+                <!-- Caja de Búsqueda -->
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Buscar por cliente o IP...">
+                </div>
+
+                <!-- Botón Actualizar -->
+                <button onclick="loadRegisteredOnts()" class="btn-refresh">
+                    <i class="fa-solid fa-rotate-right"></i> Actualizar Lista
+                </button>
+            </div>
+        </div>
+        
+        <table id="clientsTable">
+            <thead>
+                <tr>
+                    <th>Identificador / Cliente</th>
+                    <th>IP ONT</th>
+                    <th>Estado (Ping)</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="registered-table">
+                <tr><td colspan="4" style="text-align: center; color: #64748b;">Cargando ONTs desde Zabbix...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadRegisteredOnts);
+
+        async function loadRegisteredOnts() {
+            const tbody = document.getElementById('registered-table');
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #64748b;">Cargando datos...</td></tr>';
+            
+            try {
+                const res = await fetch('/api/v1/registered-onts');
+                const result = await res.json();
+                
+                if (result.status === "success" && Array.isArray(result.data) && result.data.length > 0) {
+                    tbody.innerHTML = "";
+                    result.data.forEach(function(ont) {
+                        let badgeClass = "bg-warning";
+                        let statusText = ont.status;
+                        
+                        const statusUpper = String(ont.status).toUpperCase();
+                        if (statusUpper.includes("ONLINE") || statusUpper === "1") {
+                            badgeClass = "bg-success";
+                            statusText = "ONLINE";
+                        } else if (statusUpper.includes("DOWN") || statusUpper === "0" || statusUpper.includes("FAIL")) {
+                            badgeClass = "bg-danger";
+                            statusText = "DOWN";
+                        }
+
+                        const cleanClient = ont.client.replace(/'/g, "\\'");
+                        const f = ont.frame || 0;
+                        const s = ont.slot || 1;
+                        const p = ont.port || 0;
+                        const id = ont.ont_id || 0;
+
+                        tbody.innerHTML += `<tr>
+                            <td><b>${ont.client}</b></td>
+                            <td><code>${ont.ip}</code></td>
+                            <td><span class="badge ${badgeClass}">${statusText}</span></td>
+                            <td>
+                                <button class="btn-action" onclick="changePlanDirect(${f}, ${s}, ${p}, ${id}, '${cleanClient}')"><i class="fa-solid fa-sliders"></i> Cambiar Plan</button>
+                                <button class="btn-danger" onclick="deleteOntDirect(${f}, ${s}, ${p}, ${id}, '${cleanClient}')"><i class="fa-solid fa-trash"></i> Borrar</button>
+                            </td>
+                        </tr>`;
+                    });
+
+                    // Aplica el filtro si ya había algo escrito en la caja de búsqueda
+                    filterTable();
+
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No se encontraron clientes registrados.</td></tr>';
+                }
+            } catch (err) {
+                console.error("Error al obtener clientes:", err);
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error de conexión al obtener clientes.</td></tr>';
+            }
+        }
+
+        // FUNCIÓN DE FILTRADO EN TIEMPO REAL
+        function filterTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toLowerCase().trim();
+            const table = document.getElementById('clientsTable');
+            const trs = table.getElementsByTagName('tr');
+
+            // Recorre todas las filas excepto la cabecera
+            for (let i = 1; i < trs.length; i++) {
+                const row = trs[i];
+                const clientCell = row.getElementsByTagName('td')[0];
+                const ipCell = row.getElementsByTagName('td')[1];
+
+                if (clientCell && ipCell) {
+                    const clientText = clientCell.textContent || clientCell.innerText;
+                    const ipText = ipCell.textContent || ipCell.innerText;
+
+                    // Compara si el filtro coincide con la columna Cliente o IP
+                    if (clientText.toLowerCase().indexOf(filter) > -1 || ipText.toLowerCase().indexOf(filter) > -1) {
+                        row.style.display = "";
+                    } else {
+                        row.style.display = "none";
+                    }
+                }
+            }
+        }
+
+        async function changePlanDirect(frame, slot, port, ontId, clientName) {
+            const newPlan = prompt("Nuevo plan para " + clientName + ":\n(100M, 200M, 300M, 400M, 500M, 600M)", "600M");
+            if (!newPlan) return;
+
+            const payload = { frame: parseInt(frame), slot: parseInt(slot), port: parseInt(port), ont_id: parseInt(ontId), new_plan: newPlan, vlan: 100 };
+
+            try {
+                const res = await fetch('/api/v1/onts/change-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                alert(data.status === "success" ? "Plan actualizado correctamente" : "Error al cambiar plan: " + (data.detail || "Error desconocido"));
+            } catch (err) { alert("Error de comunicación con el servidor."); }
+        }
+
+        async function deleteOntDirect(frame, slot, port, ontId, clientName) {
+            if (!confirm("¿Dar de baja y eliminar la ONT de " + clientName + "?")) return;
+
+            const payload = { frame: parseInt(frame), slot: parseInt(slot), port: parseInt(port), ont_id: parseInt(ontId), vlan: 100 };
+
+            try {
+                const res = await fetch('/api/v1/onts/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.status === "success") {
+                    alert("ONT eliminada correctamente de la OLT");
+                    loadRegisteredOnts();
+                } else {
+                    alert("Error al eliminar la ONT: " + (data.detail || "Error desconocido"));
+                }
+            } catch (err) { alert("Error de comunicación con el servidor."); }
+        }
+    </script>
+</body>
+</html>

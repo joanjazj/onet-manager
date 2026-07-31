@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Base de Datos MariaDB
+  db:
+    image: mariadb:10.11
+    container_name: zabbix_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: Dajomal1209Ing.
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: Dajomal1209Ing.
+    volumes:
+      - db_data:/var/lib/mysql
+      # Montamos el backup para importarlo fácilmente
+      - ./zabbix_db_backup.sql:/docker-entrypoint-initdb.d/zabbix_db_backup.sql:ro
+
+  # Servidor Zabbix
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:ubuntu-7.4-latest
+    container_name: zabbix_server
+    restart: always
+    ports:
+      - "10051:10051"
+    environment:
+      DB_SERVER_HOST: db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: Dajomal1209Ing.
+    depends_on:
+      - db
+
+  # Interfaz Web de Zabbix
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:ubuntu-7.4-latest
+    container_name: zabbix_web
+    restart: always
+    ports:
+      - "80:8080"  # Exponemos Zabbix directamente en el puerto 80 estándar
+    environment:
+      DB_SERVER_HOST: db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: zabbix
+      MYSQL_PASSWORD: Dajomal1209Ing.
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: "America/Guayaquil"  # Reemplaza por tu zona horaria local
+    depends_on:
+      - db
+      - zabbix-server
+
+  olt-backend:
+    build: ./backend
+    container_name: olt-provisioning-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app  # <-- ESTO ES CLAVE para que los cambios en olt_service.py se reflejen
+    environment:
+      - OLT_HOST=172.31.31.2
+      - OLT_PORT=23
+      - OLT_USER=root
+      - OLT_PASS=admin123
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  db_data:

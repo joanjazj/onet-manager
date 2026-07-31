@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprovisionamiento de ONTs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-body: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --border-color: #e2e8f0;
+            --primary-blue: #2563eb;
+            --primary-hover: #1d4ed8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); padding: 24px; }
+        
+        .card {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 24px;
+        }
+
+        h2 { font-size: 1.1rem; font-weight: 600; color: #0f172a; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        label { display: block; margin-top: 14px; font-size: 0.875rem; font-weight: 500; color: #475569; }
+        
+        input, select {
+            width: 100%;
+            padding: 10px 12px;
+            margin-top: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus { border-color: var(--primary-blue); }
+
+        .btn {
+            background: var(--primary-blue);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 18px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background: var(--primary-hover); }
+        .alert { padding: 12px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 0.9rem; margin-top: 12px; }
+        
+        .autofind-list { list-style: none; margin-top: 12px; }
+        .autofind-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        .autofind-item button {
+            background: #059669; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. AUTOFIND -->
+    <div class="card">
+        <h2><i class="fa-solid fa-radar" style="color: var(--primary-blue);"></i> ONTs Detectadas Sin Agregar (Autofind)</h2>
+        <button class="btn" onclick="checkAutofind()"><i class="fa-solid fa-magnifying-glass"></i> Escanear OLT</button>
+        <div id="autofind-results"></div>
+    </div>
+
+    <!-- 2. FORMULARIO APROVISIONAR -->
+    <div class="card">
+        <h2><i class="fa-solid fa-user-plus" style="color: var(--primary-blue);"></i> Aprovisionar Nuevo Cliente</h2>
+        <form id="provisionForm">
+            <label>Nº Contrato:</label>
+            <input type="text" id="contract" placeholder="Ej. 190" required>
+
+            <label>Nombre y Apellido del Cliente:</label>
+            <input type="text" id="client_name" placeholder="Ej. LUIS CARRION CEDILLO" required>
+
+            <label>Serie ONT (SN):</label>
+            <input type="text" id="sn" placeholder="Ej. 485754438FA2129B" required>
+
+            <label>Ubicación OLT (Frame / Slot / Puerto):</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="number" id="frame" value="0" placeholder="Frame">
+                <input type="number" id="slot" placeholder="Slot (Ej. 5)" required>
+                <input type="number" id="port" placeholder="Port (Ej. 3)" required>
+            </div>
+
+            <label>IP de la ONT:</label>
+            <input type="text" id="ip" placeholder="Ej. 10.10.1.59" required>
+
+            <label>Plan de Velocidad:</label>
+            <select id="plan">
+                <option value="100M">100M</option>
+                <option value="200M">200M</option>
+                <option value="300M" selected>300M</option>
+                <option value="400M">400M</option>
+                <option value="500M">500M</option>
+                <option value="600M">600M</option>
+            </select>
+
+            <button type="button" class="btn" onclick="sendProvision()">
+                <i class="fa-solid fa-paper-plane"></i> Aprovisionar ONT
+            </button>
+        </form>
+    </div>
+
+    <script>
+        async function checkAutofind() {
+            const div = document.getElementById('autofind-results');
+            div.innerHTML = "<p style='margin-top:12px; color:#64748b;'>Buscando ONTs en la OLT...</p>";
+            
+            try {
+                const res = await fetch('/api/v1/unprovisioned-onts');
+                const data = await res.json();
+                
+                if (!data.unprovisioned || data.unprovisioned.length === 0) {
+                    div.innerHTML = "<div class='alert'><i class='fa-solid fa-circle-info'></i> No hay ONTs pendientes de autorizar.</div>";
+                    return;
+                }
+
+                let html = "<ul class='autofind-list'>";
+                data.unprovisioned.forEach(function(ont) {
+                    html += `<li class="autofind-item">
+                        <span><b>SN:</b> <code>${ont.sn}</code> | <b>F/S/P:</b> ${ont.frame}/${ont.slot}/${ont.port}</span>
+                        <button onclick="fillForm('${ont.sn}', ${ont.frame}, ${ont.slot}, ${ont.port})">Seleccionar</button>
+                    </li>`;
+                });
+                html += "</ul>";
+                div.innerHTML = html;
+            } catch (err) {
+                console.error("Error en autofind:", err);
+                div.innerHTML = "<div class='alert'>Error al buscar ONTs no aprovisionadas.</div>";
+            }
+        }
+
+        function fillForm(sn, frame, slot, port) {
+            document.getElementById('sn').value = sn;
+            document.getElementById('frame').value = frame;
+            document.getElementById('slot').value = slot;
+            document.getElementById('port').value = port;
+        }
+
+        async function sendProvision() {
+            const payload = {
+                contract: document.getElementById('contract').value,
+                client_name: document.getElementById('client_name').value,
+                sn: document.getElementById('sn').value,
+                frame: parseInt(document.getElementById('frame').value),
+                slot: parseInt(document.getElementById('slot').value),
+                port: parseInt(document.getElementById('port').value),
+                ip: document.getElementById('ip').value,
+                plan: document.getElementById('plan').value,
+                vlan: 100
+            };
+
+            try {
+                const res = await fetch('/api/v1/provision-ont-full', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await res.json();
+                if (result.status === "success") {
+                    alert("ONT Aprovisionada correctamente");
+                    document.getElementById('provisionForm').reset();
+                } else {
+                    alert("Error en el alta: " + (result.detail || "Verifique los datos"));
+                }
+            } catch (err) {
+                console.error("Error aprovisionando:", err);
+                alert("Error de red al enviar la solicitud.");
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Aprovisionamiento de ONTs</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { color: #333; margin-top: 0; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-top: 15px; font-size: 14px; }
+        button:hover { background: #218838; }
+        .btn-secondary { background: #17a2b8; }
+        .btn-secondary:hover { background: #138496; }
+        .btn-danger { background: #dc3545; margin-top: 0; padding: 6px 10px; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-action { background: #007bff; margin-top: 0; padding: 6px 10px; }
+        .btn-action:hover { background: #0069d9; }
+        .alert { padding: 10px; background: #fff3cd; color: #856404; border-radius: 4px; margin-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f8f9fa; }
+        tr:hover { background-color: #f1f1f1; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+        .bg-success { background-color: #28a745; }
+        .bg-warning { background-color: #ffc107; color: #333; }
+        .bg-danger { background-color: #dc3545; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. ONTs DETECTADAS SIN AGREGAR -->
+    <div class="card">
+        <h2>ONTs Detectadas Sin Agregar (Autofind)</h2>
+        <button onclick="checkAutofind()">Escanear OLT</button>
+        <div id="autofind-results" style="margin-top: 15px;"></div>
+    </div>
+
+    <!-- 2. APROVISIONAR CLIENTE NUEVO -->
+    <div class="card">
+        <h2>Aprovisionar Cliente</h2>
+        <form id="provisionForm">
+            <label>Nº Contrato:</label>
+            <input type="text" id="contract" placeholder="190" required>
+
+            <label>Nombre y Apellido:</label>
+            <input type="text" id="client_name" placeholder="LUIS CARRION CEDILLO" required>
+
+            <label>Serie ONT (SN):</label>
+            <input type="text" id="sn" placeholder="485754438FA2129B" required>
+
+            <label>Ubicación OLT (Frame/Slot/Puerto):</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="frame" value="0" placeholder="Frame">
+                <input type="number" id="slot" placeholder="Slot (5)" required>
+                <input type="number" id="port" placeholder="Port (3)" required>
+            </div>
+
+            <label>IP de la ONT:</label>
+            <input type="text" id="ip" placeholder="10.10.1.59" required>
+
+            <label>Plan de Velocidad:</label>
+            <select id="plan">
+                <option value="100M">100M</option>
+                <option value="200M">200M</option>
+                <option value="300M" selected>300M</option>
+                <option value="400M">400M</option>
+                <option value="500M">500M</option>
+                <option value="600M">600M</option>
+            </select>
+
+            <button type="button" onclick="sendProvision()">Aprovisionar ONT</button>
+        </form>
+    </div>
+
+    <!-- 3. CLIENTES REGISTRADOS (ZABBIX + GESTIÓN) -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0;">Clientes Registrados (Monitoreo Zabbix)</h2>
+            <button onclick="loadRegisteredOnts()" class="btn-secondary" style="margin: 0;">&#8635; Actualizar Lista</button>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Identificador / Cliente</th>
+                    <th>IP ONT</th>
+                    <th>Estado (Ping)</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="registered-table">
+                <tr><td colspan="4">Cargando ONTs desde Zabbix...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRegisteredOnts();
+        });
+
+        async function checkAutofind() {
+            const div = document.getElementById('autofind-results');
+            div.innerHTML = "Buscando ONTs en la OLT...";
+            
+            try {
+                const res = await fetch('/api/v1/unprovisioned-onts');
+                const data = await res.json();
+                
+                if (!data.unprovisioned || data.unprovisioned.length === 0) {
+                    div.innerHTML = "<div class='alert'>No hay ONTs pendientes de autorizar.</div>";
+                    return;
+                }
+
+                let html = "<ul>";
+                data.unprovisioned.forEach(function(ont) {
+                    html += "<li>SN: <b>" + ont.sn + "</b> en F/S/P: " + ont.frame + "/" + ont.slot + "/" + ont.port + 
+                            " <button onclick=\"fillForm('" + ont.sn + "', " + ont.frame + ", " + ont.slot + ", " + ont.port + ")\">Seleccionar</button></li>";
+                });
+                html += "</ul>";
+                div.innerHTML = html;
+            } catch (err) {
+                console.error("Error en autofind:", err);
+                div.innerHTML = "<div class='alert'>Error al buscar ONTs no aprovisionadas.</div>";
+            }
+        }
+
+        function fillForm(sn, frame, slot, port) {
+            document.getElementById('sn').value = sn;
+            document.getElementById('frame').value = frame;
+            document.getElementById('slot').value = slot;
+            document.getElementById('port').value = port;
+        }
+
+        async function sendProvision() {
+            const payload = {
+                contract: document.getElementById('contract').value,
+                client_name: document.getElementById('client_name').value,
+                sn: document.getElementById('sn').value,
+                frame: parseInt(document.getElementById('frame').value),
+                slot: parseInt(document.getElementById('slot').value),
+                port: parseInt(document.getElementById('port').value),
+                ip: document.getElementById('ip').value,
+                plan: document.getElementById('plan').value,
+                vlan: 100
+            };
+
+            try {
+                const res = await fetch('/api/v1/provision-ont-full', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await res.json();
+                if (result.status === "success") {
+                    alert("ONT Aprovisionada correctamente");
+                    loadRegisteredOnts();
+                } else {
+                    alert("Error en el alta: " + (result.detail || "Verifique los datos"));
+                }
+            } catch (err) {
+                console.error("Error aprovisionando:", err);
+                alert("Error de red al enviar la solicitud.");
+            }
+        }
+
+        async function loadRegisteredOnts() {
+            const tbody = document.getElementById('registered-table');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '<tr><td colspan="4">Cargando datos...</td></tr>';
+            
+            try {
+                const res = await fetch('/api/v1/registered-onts');
+                const result = await res.json();
+                
+                if (result.status === "success" && Array.isArray(result.data) && result.data.length > 0) {
+                    tbody.innerHTML = "";
+                    result.data.forEach(function(ont) {
+                        let badgeClass = "bg-warning";
+                        let statusText = ont.status;
+                        
+                        const statusUpper = String(ont.status).toUpperCase();
+                        if (statusUpper.includes("ONLINE") || statusUpper === "1") {
+                            badgeClass = "bg-success";
+                            statusText = "ONLINE";
+                        } else if (statusUpper.includes("DOWN") || statusUpper === "0" || statusUpper.includes("FAIL")) {
+                            badgeClass = "bg-danger";
+                            statusText = "DOWN";
+                        }
+
+                        const cleanClient = ont.client.replace(/'/g, "\\'");
+                        const f = ont.frame || 0;
+                        const s = ont.slot || 1;
+                        const p = ont.port || 0;
+                        const id = ont.ont_id || 0;
+
+                        tbody.innerHTML += "<tr>" +
+                            "<td><b>" + ont.client + "</b></td>" +
+                            "<td><code>" + ont.ip + "</code></td>" +
+                            "<td><span class='badge " + badgeClass + "'>" + statusText + "</span></td>" +
+                            "<td>" +
+                                "<button class='btn-action' onclick=\"changePlanDirect(" + f + ", " + s + ", " + p + ", " + id + ", '" + cleanClient + "')\">Cambiar Plan</button> " +
+                                "<button class='btn-danger' onclick=\"deleteOntDirect(" + f + ", " + s + ", " + p + ", " + id + ", '" + cleanClient + "')\">Cancelar / Borrar</button>" +
+                            "</td>" +
+                        "</tr>";
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4">No se encontraron clientes en Zabbix.</td></tr>';
+                }
+            } catch (err) {
+                console.error("Error al obtener clientes:", err);
+                tbody.innerHTML = '<tr><td colspan="4">Error de conexión al obtener clientes.</td></tr>';
+            }
+        }
+
+        // Cambio de Plan Directo
+        async function changePlanDirect(frame, slot, port, ontId, clientName) {
+            const newPlan = prompt("Nuevo plan para " + clientName + ":\n(100M, 200M, 300M, 400M, 500M, 600M)", "600M");
+            if (!newPlan) return;
+
+            const payload = {
+                frame: parseInt(frame),
+                slot: parseInt(slot),
+                port: parseInt(port),
+                ont_id: parseInt(ontId),
+                new_plan: newPlan,
+                vlan: 100
+            };
+
+            try {
+                const res = await fetch('/api/v1/onts/change-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                alert(data.status === "success" ? "Plan actualizado correctamente" : "Error al cambiar plan: " + (data.detail || "Error desconocido"));
+            } catch (err) {
+                alert("Error de comunicación con el servidor.");
+            }
+        }
+
+        // Eliminación Directa
+        async function deleteOntDirect(frame, slot, port, ontId, clientName) {
+            if (!confirm("¿Dar de baja y eliminar la ONT de " + clientName + "?")) return;
+
+            const payload = {
+                frame: parseInt(frame),
+                slot: parseInt(slot),
+                port: parseInt(port),
+                ont_id: parseInt(ontId),
+                vlan: 100
+            };
+
+            try {
+                const res = await fetch('/api/v1/onts/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.status === "success") {
+                    alert("ONT eliminada correctamente de la OLT");
+                    loadRegisteredOnts();
+                } else {
+                    alert("Error al eliminar la ONT: " + (data.detail || "Error desconocido"));
+                }
+            } catch (err) {
+                alert("Error de comunicación con el servidor.");
+            }
+        }
+
+        // Aliases por compatibilidad
+        function promptChangePlan(clientName) { changePlanDirect(0, 1, 0, 0, clientName); }
+        function promptDeleteOnt(clientName) { deleteOntDirect(0, 1, 0, 0, clientName); }
+    </script>
+</body>
+</html>
