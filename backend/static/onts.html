@@ -42,6 +42,53 @@
             gap: 12px;
         }
 
+        /* --- ESTILOS TARJETAS MÉTRICAS (KPIs) --- */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: #f8fafc;
+            padding: 16px 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .kpi-info span {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #64748b;
+            letter-spacing: 0.5px;
+        }
+
+        .kpi-info h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 2px;
+        }
+
+        .kpi-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .kpi-total .kpi-icon { background: #eff6ff; color: #2563eb; }
+        .kpi-online .kpi-icon { background: #f0fdf4; color: #16a34a; }
+        .kpi-offline .kpi-icon { background: #fef2f2; color: #dc2626; }
+
         /* --- BARRA DE BÚSQUEDA --- */
         .search-box {
             position: relative;
@@ -98,6 +145,7 @@
 <body>
 
     <div class="card">
+        <!-- ENCABEZADO -->
         <div class="header-flex">
             <h2><i class="fa-solid fa-users" style="color: var(--primary-blue);"></i> Clientes Registrados (Monitoreo Zabbix)</h2>
             
@@ -114,7 +162,41 @@
                 </button>
             </div>
         </div>
+
+        <!-- TARJETAS MÉTRICAS (KPIs) -->
+        <div class="kpi-grid">
+            <div class="kpi-card kpi-total">
+                <div class="kpi-info">
+                    <span>Total Clientes</span>
+                    <h3 id="count-total">0</h3>
+                </div>
+                <div class="kpi-icon">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-online">
+                <div class="kpi-info">
+                    <span>Active / Online</span>
+                    <h3 id="count-online">0</h3>
+                </div>
+                <div class="kpi-icon">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+            </div>
+
+            <div class="kpi-card kpi-offline">
+                <div class="kpi-info">
+                    <span>Down / Offline</span>
+                    <h3 id="count-offline">0</h3>
+                </div>
+                <div class="kpi-icon">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                </div>
+            </div>
+        </div>
         
+        <!-- TABLA -->
         <table id="clientsTable">
             <thead>
                 <tr>
@@ -143,6 +225,11 @@
                 
                 if (result.status === "success" && Array.isArray(result.data) && result.data.length > 0) {
                     tbody.innerHTML = "";
+                    
+                    let totalCount = result.data.length;
+                    let onlineCount = 0;
+                    let offlineCount = 0;
+
                     result.data.forEach(function(ont) {
                         let badgeClass = "bg-warning";
                         let statusText = ont.status;
@@ -151,9 +238,13 @@
                         if (statusUpper.includes("ONLINE") || statusUpper === "1") {
                             badgeClass = "bg-success";
                             statusText = "ONLINE";
+                            onlineCount++;
                         } else if (statusUpper.includes("DOWN") || statusUpper === "0" || statusUpper.includes("FAIL")) {
                             badgeClass = "bg-danger";
                             statusText = "DOWN";
+                            offlineCount++;
+                        } else {
+                            offlineCount++;
                         }
 
                         const cleanClient = ont.client.replace(/'/g, "\\'");
@@ -173,16 +264,29 @@
                         </tr>`;
                     });
 
+                    // Actualizar métricas dinámicamente
+                    document.getElementById('count-total').textContent = totalCount;
+                    document.getElementById('count-online').textContent = onlineCount;
+                    document.getElementById('count-offline').textContent = offlineCount;
+
                     // Aplica el filtro si ya había algo escrito en la caja de búsqueda
                     filterTable();
 
                 } else {
                     tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No se encontraron clientes registrados.</td></tr>';
+                    resetCounters();
                 }
             } catch (err) {
                 console.error("Error al obtener clientes:", err);
                 tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error de conexión al obtener clientes.</td></tr>';
+                resetCounters();
             }
+        }
+
+        function resetCounters() {
+            document.getElementById('count-total').textContent = "0";
+            document.getElementById('count-online').textContent = "0";
+            document.getElementById('count-offline').textContent = "0";
         }
 
         // FUNCIÓN DE FILTRADO EN TIEMPO REAL
