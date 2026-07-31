@@ -3,155 +3,147 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ingreso - OLT Manager</title>
+    <title>Iniciar Sesión - ONET Manager</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
         :root {
-            --bg-body: #0f172a;
+            --bg-body: #f8fafc;
             --card-bg: #ffffff;
-            --primary-blue: #2563eb;
-            --primary-hover: #1d4ed8;
             --text-main: #334155;
             --border-color: #e2e8f0;
+            --primary-blue: #2563eb;
+            --primary-hover: #1d4ed8;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-
-        body {
-            background-color: var(--bg-body);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-        }
+        body { background-color: var(--bg-body); color: var(--text-main); display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
 
         .login-card {
             background: var(--card-bg);
-            width: 100%;
-            max-width: 400px;
-            padding: 32px;
+            border: 1px solid var(--border-color);
             border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            width: 100%;
+            max-width: 380px;
+            padding: 32px;
         }
 
-        .brand-header {
-            text-align: center;
-            margin-bottom: 28px;
-        }
-
-        .brand-header i {
-            font-size: 2.5rem;
-            color: var(--primary-blue);
-            margin-bottom: 10px;
-        }
-
-        .brand-header h2 {
-            font-size: 1.3rem;
-            color: #0f172a;
-            font-weight: 700;
-        }
-
-        .brand-header p {
-            font-size: 0.85rem;
-            color: #64748b;
-            margin-top: 4px;
-        }
-
-        .form-group {
-            margin-bottom: 18px;
-        }
-
-        label {
-            display: block;
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--text-main);
-            margin-bottom: 6px;
-        }
-
-        .input-wrapper {
-            position: relative;
+        .brand {
             display: flex;
             align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 24px;
         }
 
-        .input-wrapper i {
-            position: absolute;
-            left: 12px;
-            color: #94a3b8;
-        }
+        .brand i { font-size: 1.8rem; color: var(--primary-blue); }
+        .brand h1 { font-size: 1.4rem; font-weight: 700; color: #0f172a; }
 
+        .form-group { margin-bottom: 18px; }
+        .form-group label { display: block; font-size: 0.82rem; font-weight: 600; color: #64748b; margin-bottom: 6px; }
+        
+        .input-wrapper { position: relative; display: flex; align-items: center; }
+        .input-wrapper i { position: absolute; left: 12px; color: #94a3b8; font-size: 0.9rem; }
         .input-wrapper input {
             width: 100%;
-            padding: 10px 12px 10px 36px;
+            padding: 10px 12px 10px 38px;
             border: 1px solid var(--border-color);
             border-radius: 6px;
             font-size: 0.9rem;
             outline: none;
-            transition: border-color 0.2s;
+            transition: all 0.2s;
         }
-
         .input-wrapper input:focus {
             border-color: var(--primary-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
         }
 
-        .btn-submit {
+        .btn-login {
             width: 100%;
             background: var(--primary-blue);
             color: white;
             border: none;
-            padding: 12px;
+            padding: 10px;
             border-radius: 6px;
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             cursor: pointer;
             transition: background 0.2s;
-            margin-top: 10px;
+            margin-top: 8px;
         }
+        .btn-login:hover { background: var(--primary-hover); }
 
-        .btn-submit:hover {
-            background: var(--primary-hover);
+        .error-message {
+            background-color: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fee2e2;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            margin-bottom: 16px;
+            display: none;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
     <div class="login-card">
-        <div class="brand-header">
+        <div class="brand">
             <i class="fa-solid fa-network-wired"></i>
-            <h2>ONET Manager</h2>
-            <p>Ingrese sus credenciales de acceso</p>
+            <h1>ONET Manager</h1>
+        </div>
+
+        <div id="errorAlert" class="error-message">
+            <i class="fa-solid fa-circle-exclamation"></i> Usuario o contraseña incorrectos
         </div>
 
         <form id="loginForm">
             <div class="form-group">
-                <label>Usuario</label>
+                <label for="username">Usuario</label>
                 <div class="input-wrapper">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" id="username" placeholder="admin" required>
+                    <input type="text" id="username" placeholder="Ingresa tu usuario" required autocomplete="off">
                 </div>
             </div>
 
             <div class="form-group">
-                <label>Contraseña</label>
+                <label for="password">Contraseña</label>
                 <div class="input-wrapper">
                     <i class="fa-solid fa-lock"></i>
                     <input type="password" id="password" placeholder="••••••••" required>
                 </div>
             </div>
 
-            <button type="submit" class="btn-submit">Ingresar al Sistema</button>
+            <button type="submit" class="btn-login">
+                <i class="fa-solid fa-right-to-bracket"></i> Iniciar Sesión
+            </button>
         </form>
     </div>
 
     <script>
+        // Credenciales configuradas en el cliente
+        const USER_CORRECTO = "admin";
+        const PASS_CORRECTO = "Onet.2025"; // Cambia tu clave aquí
+
+        // Si ya está autenticado, redirigir al index directamente
+        if (sessionStorage.getItem('onet_authenticated') === 'true') {
+            window.location.href = 'index.html';
+        }
+
         document.getElementById('loginForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            // Lógica para enviar a /api/v1/login o guardar sesión local
-            localStorage.setItem('auth', 'true');
-            window.location.href = '/app/index.html';
+            const user = document.getElementById('username').value.trim();
+            const pass = document.getElementById('password').value;
+            const errorAlert = document.getElementById('errorAlert');
+
+            if (user === USER_CORRECTO && pass === PASS_CORRECTO) {
+                sessionStorage.setItem('onet_authenticated', 'true');
+                window.location.href = 'index.html'; // Redirige a la página principal
+            } else {
+                errorAlert.style.display = 'block';
+            }
         });
     </script>
 </body>
