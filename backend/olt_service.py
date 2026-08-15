@@ -106,32 +106,48 @@ class HuaweiOLT:
             cmd = f"display ont info {frame} {slot} {port} all"
             output = self._execute_telnet_session([cmd])
             
+            logger.debug(f"[GET_FREE_ID] Salida CLI recibida de MA5800:\n{output}")
+            
             used_ids = set()
-            matches = re.findall(rf"{frame}/{slot}/{port}/(\d+)", output)
+
+            # Regex flexible: Tolera espacios opcionales alrededor de las barras del F/S/P
+            # Ejemplo de match: "0/ 2/7   0", "0/2/7 1", "0 / 2 / 7 \t 15"
+            pattern = rf"{frame}\s*/\s*{slot}\s*/\s*{port}\s+(\d+)"
+            matches = re.findall(pattern, output)
+            
             for m in matches:
                 used_ids.add(int(m))
-            
-            lines = output.splitlines()
-            for line in lines:
-                parts = line.split()
-                if len(parts) > 1 and parts[0].isdigit():
-                    used_ids.add(int(parts[0]))
 
+            logger.info(f"[GET_FREE_ID] IDs ocupados detectados en {frame}/{slot}/{port}: {sorted(list(used_ids))}")
+
+            # Buscar el primer ID libre entre 0 y 127
             for candidate in range(128):
                 if candidate not in used_ids:
+                    logger.info(f"[GET_FREE_ID] Próximo ID libre para asignar: {candidate}")
                     return candidate
-            return 0
-        except Exception as e:
-            logger.error(f"Error calculando ONT ID libre: {e}")
-            return 0
+                    
+            raise Exception(f"El puerto {frame}/{slot}/{port} esta lleno (128 ONTs ocupadas).")
 
+        except Exception as e:
+            logger.error(f"[GET_FREE_ID] Error calculando ONT ID libre en {frame}/{slot}/{port}: {e}")
+            raise e
+    
     def provision_ont_excel_flow(
         self, frame: int, slot: int, port: int, ont_id: int = None, sn: str = "",
         contract: str = "", client_name: str = "", ip: str = "", plan: str = "", vlan: int = 100
     ):
-        if ont_id is None or ont_id == "" or ont_id == 0:
+        # 1. LOG DE ENTRADA: Validar qué tipos y valores llegan de la llamada
+        logger.debug(
+            f"[PROVISION] Params recibidos -> F/S/P: {frame}/{slot}/{port} | "
+            f"ont_id_raw: {ont_id} (tipo: {type(ont_id).__name__}) | SN: '{sn}' | Contrato: '{contract}'"
+        )
+        # 2. Evaluación del ID
+        if ont_id is None or ont_id == "" or ont_id == 0 or str(ont_id).strip() == "0":
+            logger.info(f"[PROVISION] 'ont_id' no valido ({ont_id}). Buscando proximo ID libre en OLT...")
             ont_id = self._get_next_free_ont_id(frame, slot, port)
-            logger.info(f"ONT ID asignado automáticamente para {sn} en {frame}/{slot}/{port}: {ont_id}")
+            logger.info(f"[PROVISION] ONT ID libre retornado por OLT para {sn}: {ont_id}")
+        else:
+            logger.info(f"[PROVISION] Usando 'ont_id' pasado explícitamente: {ont_id}")
 
         clean_name = client_name.replace(" ", "_").upper()
         description = f"ONTB-INT{contract}-{clean_name}"
@@ -140,6 +156,7 @@ class HuaweiOLT:
         idx_up = indices["up"]
         idx_down = indices["down"]
 
+        # 3. CORRECCIÓN EN COMANDOS: Se añade 'ont-id {ont_id}' a la confirmación
         commands = [
             f"interface gpon {frame}/{slot}",
             f'ont confirm {port} sn-auth {sn} omci ont-lineprofile-id 1 ont-srvprofile-id 1 desc "{description}"',
@@ -149,6 +166,10 @@ class HuaweiOLT:
             f"service-port vlan {vlan} gpon {frame}/{slot}/{port} ont {ont_id} gemport 1 multi-service user-vlan {vlan} tag-transform translate inbound traffic-table index {idx_up} outbound traffic-table index {idx_down}",
             "save"
         ]
+
+        # 4. LOG DE SALIDA: Imprimir la lista de comandos que se enviarán por Telnet
+        logger.debug(f"[PROVISION] Lista de comandos a ejecutar en OLT:\n" + "\n".join(commands))
+
         return self._execute_telnet_session(commands)
 
     def change_ont_plan(self, frame: int, slot: int, port: int, ont_id: int, new_plan: str, vlan: int = 100):
