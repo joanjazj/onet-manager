@@ -53,7 +53,7 @@ class ZabbixService:
         }
 
         try:
-            response = requests.post(self.url, json=payload, headers=headers, timeout=10)
+            response = requests.post(self.url, json=payload, headers=headers, timeout=20)
             response.raise_for_status()
             data = response.json()
 
