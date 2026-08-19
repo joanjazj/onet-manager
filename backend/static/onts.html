@@ -7,7 +7,8 @@
     <script src="auth.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <style>
         :root {
             --bg-body: #f8fafc;
@@ -318,26 +319,129 @@
         }
 
         async function changePlanDirect(frame, slot, port, ontId, clientName) {
-            const newPlan = prompt("Nuevo plan para " + clientName + ":\n(100M, 200M, 300M, 400M, 500M, 600M)", "600M");
+            // 1. Mostrar loader SweetAlert mientras Telnet consulta la OLT
+            Swal.fire({
+                title: 'Consultando OLT...',
+                text: `Obteniendo el plan actual para ${clientName}`,
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            let currentPlan = "Desconocido";
+
+            try {
+                const queryRes = await fetch(`/api/v1/onts/current-plan?frame=${frame}&slot=${slot}&port=${port}&ont_id=${ontId}`);
+                if (queryRes.ok) {
+                    const queryData = await queryRes.json();
+                    currentPlan = queryData.current_plan || "No asignado";
+                }
+            } catch (e) {
+                console.warn("Error consultando plan:", e);
+            }
+
+            // 2. Desplegar modal interactivo para la selección del nuevo plan
+            const { value: newPlan } = await Swal.fire({
+                title: 'Cambiar Plan de Velocidad',
+                html: `
+                    <div class="text-start mb-3">
+                        <p class="mb-1"><strong>Cliente:</strong> ${clientName}</p>
+                        <p class="mb-3"><strong>Plan Actual en OLT:</strong> <span class="badge bg-info text-dark">${currentPlan}</span></p>
+                    </div>
+                `,
+                input: 'select',
+                inputOptions: {
+                    '100M': '100M',
+                    '200M': '200M',
+                    '300M': '300M',
+                    '400M': '400M',
+                    '500M': '500M',
+                    '600M': '600M'
+                },
+                inputValue: currentPlan !== "Desconocido" && currentPlan !== "No asignado" ? currentPlan : '600M',
+                showCancelButton: true,
+                confirmButtonText: 'Guardar Cambio',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#0d6efd'
+            });
+
             if (!newPlan) return;
 
-            const payload = { frame: parseInt(frame), slot: parseInt(slot), port: parseInt(port), ont_id: parseInt(ontId), new_plan: newPlan, vlan: 100 };
+            // 3. Mostrar loader mientras se envía la orden de modificación de traffic-tables
+            Swal.fire({
+                title: 'Aplicando cambio...',
+                text: 'Enviando comandos a la OLT Huawei',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
 
             try {
                 const res = await fetch('/api/v1/onts/change-plan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        frame: parseInt(frame),
+                        slot: parseInt(slot),
+                        port: parseInt(port),
+                        ont_id: parseInt(ontId),
+                        new_plan: newPlan,
+                        vlan: 100
+                    })
                 });
+
                 const data = await res.json();
-                alert(data.status === "success" ? "Plan actualizado correctamente" : "Error al cambiar plan: " + (data.detail || "Error desconocido"));
-            } catch (err) { alert("Error de comunicación con el servidor."); }
+                if (res.ok && data.status === "success") {
+                    Swal.fire('¡Éxito!', 'El plan se ha actualizado correctamente en la OLT.', 'success');
+                    if (typeof loadRegisteredOnts === 'function') loadRegisteredOnts();
+                } else {
+                    Swal.fire('Error', data.detail || 'No se pudo actualizar el plan.', 'error');
+                }
+            } catch (err) {
+                Swal.fire('Error de red', 'No se pudo establecer comunicación con el backend.', 'error');
+            }
         }
 
         async function deleteOntDirect(frame, slot, port, ontId, clientName) {
-            if (!confirm("¿Dar de baja y eliminar la ONT de " + clientName + "?")) return;
+            // 1. Confirmación previa con advertencia crítica
+            const confirmResult = await Swal.fire({
+                title: '¿Confirmar eliminación?',
+                html: `
+                    <div class="text-start">
+                        <p>Está a punto de dar de baja y eliminar la ONT de la OLT:</p>
+                        <p class="mb-1"><strong>Cliente:</strong> ${clientName}</p>
+                        <p class="mb-0"><strong>Posición:</strong> ${frame}/${slot}/${port} (ID: ${ontId})</p>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc3545', // Rojo de advertencia
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, eliminar ONT',
+                cancelButtonText: 'Cancelar'
+            });
 
-            const payload = { frame: parseInt(frame), slot: parseInt(slot), port: parseInt(port), ont_id: parseInt(ontId), vlan: 100 };
+            if (!confirmResult.isConfirmed) return;
+
+            // 2. Pantalla de carga mientras Telnet elimina los service-ports y la ONT
+            Swal.fire({
+                title: 'Eliminando ONT...',
+                text: 'Enviando comandos de desconfiguración a la OLT Huawei',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const payload = { 
+                frame: parseInt(frame), 
+                slot: parseInt(slot), 
+                port: parseInt(port), 
+                ont_id: parseInt(ontId), 
+                vlan: 100 
+            };
 
             try {
                 const res = await fetch('/api/v1/onts/delete', {
@@ -345,14 +449,37 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+
                 const data = await res.json();
-                if (data.status === "success") {
-                    alert("ONT eliminada correctamente de la OLT");
-                    loadRegisteredOnts();
+
+                // 3. Respuesta visual del resultado
+                if (res.ok && data.status === "success") {
+                    await Swal.fire({
+                        title: '¡Eliminada!',
+                        text: `La ONT de ${clientName} ha sido removida correctamente de la OLT.`,
+                        icon: 'success',
+                        confirmButtonColor: '#0d6efd'
+                    });
+
+                    if (typeof loadRegisteredOnts === 'function') {
+                        loadRegisteredOnts();
+                    }
                 } else {
-                    alert("Error al eliminar la ONT: " + (data.detail || "Error desconocido"));
+                    Swal.fire({
+                        title: 'Error al eliminar',
+                        text: data.detail || "No se pudo completar la desconfiguración en la OLT.",
+                        icon: 'error',
+                        confirmButtonColor: '#dc3545'
+                    });
                 }
-            } catch (err) { alert("Error de comunicación con el servidor."); }
+            } catch (err) {
+                Swal.fire({
+                    title: 'Error de comunicación',
+                    text: 'Ocurrió un fallo al conectar con el servidor backend.',
+                    icon: 'error',
+                    confirmButtonColor: '#dc3545'
+                });
+            }
         }
     </script>
 </body>

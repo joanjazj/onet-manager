@@ -172,6 +172,43 @@ class HuaweiOLT:
 
         return self._execute_telnet_session(commands)
 
+    def get_current_plan(self, frame: int, slot: int, port: int, ont_id: int) -> str:
+        try:
+            commands = [f"display service-port port {frame}/{slot}/{port} ont {ont_id}"]
+            output = self._execute_telnet_session(commands)
+            
+            logger.info(f"[GET_PLAN] Salida CLI para {frame}/{slot}/{port} ONT {ont_id}:\n{output}")
+            
+            # Mapeo inverso evaluando tanto la bajada (TX/down) como la subida (RX/up)
+            # TRAFFIC_TABLES: {"600M": {"up": 18, "down": 19}, ...}
+            
+            # Buscar la fila de datos que contiene el estado 'up' o 'down' al final
+            # Ejemplo de fila: "368  100 common  gpon 0/1 /4  0  1  vlan 100  19  18  up"
+            lines = output.splitlines()
+            for line in lines:
+                if "gpon" in line.lower() and ("up" in line.lower() or "down" in line.lower()):
+                    parts = line.split()
+                    # En la tabla Huawei: parts[-3] es RX, parts[-2] es TX, parts[-1] es STATE
+                    if len(parts) >= 3:
+                        try:
+                            rx_idx = int(parts[-3]) # Inbound / Subida
+                            tx_idx = int(parts[-2]) # Outbound / Bajada
+
+                            # Mapear contra el diccionario TRAFFIC_TABLES
+                            for plan_name, idx_dict in TRAFFIC_TABLES.items():
+                                if idx_dict["up"] == rx_idx or idx_dict["down"] == tx_idx or idx_dict["up"] == tx_idx or idx_dict["down"] == rx_idx:
+                                    return plan_name
+
+                            return f"Index RX:{rx_idx} TX:{tx_idx}"
+                        except ValueError:
+                            continue
+
+            return "No asignado"
+            
+        except Exception as e:
+            logger.error(f"Error consultando plan actual en OLT: {e}")
+            return "Error al consultar"
+
     def change_ont_plan(self, frame: int, slot: int, port: int, ont_id: int, new_plan: str, vlan: int = 100):
         try:
             indices = TRAFFIC_TABLES.get(new_plan.upper(), {"up": 12, "down": 13})

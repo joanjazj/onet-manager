@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from config import settings
@@ -120,6 +120,29 @@ def change_plan(req: ChangePlanRequest):
         return {"status": "success", "output": output}
     except Exception as e:
         logger.error(f"Error al cambiar plan: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint para consultar plan
+@app.get("/api/v1/onts/current-plan")
+def get_current_plan(
+    frame: int = Query(...),
+    slot: int = Query(...),
+    port: int = Query(...),
+    ont_id: int = Query(...)
+):
+    """
+    Endpoint invocado por la interfaz HTML/JS para consultar
+    el plan configurado en la OLT antes de abrir el prompt.
+    """
+    try:
+        olt = HuaweiOLT(settings.OLT_HOST, settings.OLT_USER, settings.OLT_PASS, settings.OLT_PORT)
+        plan = olt.get_current_plan(frame, slot, port, ont_id)
+        return {
+            "status": "success",
+            "current_plan": plan
+        }
+    except Exception as e:
+        logger.error(f"Error consultando plan actual: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint para cancelar/eliminar ONT

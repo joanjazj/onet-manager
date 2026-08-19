@@ -8,6 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- Librería SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
     <style>
         :root {
             --bg-body: #f8fafc;
@@ -166,18 +169,73 @@
         }
 
         async function sendProvision() {
+            // Extraer valores
+            const contract = document.getElementById('contract').value.trim();
+            const clientName = document.getElementById('client_name').value.trim();
+            const sn = document.getElementById('sn').value.trim();
+            const frameVal = document.getElementById('frame').value;
+            const slotVal = document.getElementById('slot').value;
+            const portVal = document.getElementById('port').value;
+            const ip = document.getElementById('ip').value.trim();
+            const plan = document.getElementById('plan').value;
+
+            // 1. Validación de campos requeridos
+            if (!contract || !clientName || !sn || slotVal === "" || portVal === "" || !ip) {
+                Swal.fire({
+                    title: 'Campos Incompletos',
+                    text: 'Por favor, llene todos los campos requeridos antes de aprovisionar.',
+                    icon: 'warning',
+                    confirmButtonColor: '#2563eb'
+                });
+                return;
+            }
+
+            // 2. Modal de Confirmación Previa
+            const confirmResult = await Swal.fire({
+                title: '¿Aprovisionar ONT?',
+                html: `
+                    <div style="text-align: left; font-size: 0.9rem; line-height: 1.5;">
+                        <p><b>Cliente:</b> ${clientName}</p>
+                        <p><b>Nº Contrato:</b> ${contract}</p>
+                        <p><b>Serie (SN):</b> <code>${sn}</code></p>
+                        <p><b>Ubicación OLT:</b> ${frameVal}/${slotVal}/${portVal}</p>
+                        <p><b>IP Configurada:</b> ${ip}</p>
+                        <p><b>Plan de Velocidad:</b> ${plan}</p>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: '<i class="fa-solid fa-check"></i> Sí, Aprovisionar',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (!confirmResult.isConfirmed) return;
+
+            // 3. Estado de Carga Asíncrono (Telnet OLT Executing)
+            Swal.fire({
+                title: 'Aprovisionando ONT...',
+                text: 'Enviando comandos de configuración a la OLT Huawei. Por favor espere.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
             const payload = {
-                contract: document.getElementById('contract').value,
-                client_name: document.getElementById('client_name').value,
-                sn: document.getElementById('sn').value,
-                frame: parseInt(document.getElementById('frame').value),
-                slot: parseInt(document.getElementById('slot').value),
-                port: parseInt(document.getElementById('port').value),
-                ip: document.getElementById('ip').value,
-                plan: document.getElementById('plan').value,
+                contract: contract,
+                client_name: clientName,
+                sn: sn,
+                frame: parseInt(frameVal) || 0,
+                slot: parseInt(slotVal),
+                port: parseInt(portVal),
+                ip: ip,
+                plan: plan,
                 vlan: 100
             };
 
+            // 4. Envío de petición al backend
             try {
                 const res = await fetch('/api/v1/provision-ont-full', {
                     method: 'POST',
@@ -186,15 +244,33 @@
                 });
 
                 const result = await res.json();
-                if (result.status === "success") {
-                    alert("ONT Aprovisionada correctamente");
+
+                if (res.ok && result.status === "success") {
+                    await Swal.fire({
+                        title: '¡Aprovisionamiento Exitoso!',
+                        text: `La ONT del cliente ${clientName} ha sido registrada correctamente.`,
+                        icon: 'success',
+                        confirmButtonColor: '#2563eb'
+                    });
+                    
                     document.getElementById('provisionForm').reset();
+                    document.getElementById('frame').value = 0; // Restaurar frame default
                 } else {
-                    alert("Error en el alta: " + (result.detail || "Verifique los datos"));
+                    Swal.fire({
+                        title: 'Error en el Aprovisionamiento',
+                        text: result.detail || "Verifique los datos o el estado de la OLT.",
+                        icon: 'error',
+                        confirmButtonColor: '#dc2626'
+                    });
                 }
             } catch (err) {
                 console.error("Error aprovisionando:", err);
-                alert("Error de red al enviar la solicitud.");
+                Swal.fire({
+                    title: 'Error de Red',
+                    text: 'No se pudo conectar con el servidor backend.',
+                    icon: 'error',
+                    confirmButtonColor: '#dc2626'
+                });
             }
         }
     </script>
