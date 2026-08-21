@@ -40,9 +40,9 @@
 
         <div class="drop-zone" onclick="document.getElementById('excelFile').click()">
             <i class="fa-solid fa-cloud-arrow-up"></i>
-            <p>Haz clic para seleccionar o arrastra aquí tu archivo Excel (.xlsx)</p>
+            <p>Haz clic para seleccionar o arrastra aquí tu archivo CSV o Excel (.csv, .xlsx)</p>
             <div id="fileName" class="file-info"></div>
-            <input type="file" id="excelFile" class="file-input" accept=".xlsx, .xls" onchange="mostrarNombreArchivo()">
+            <input type="file" id="excelFile" class="file-input" accept=".csv, .xlsx, .xls" onchange="mostrarNombreArchivo()">
         </div>
 
         <button id="btnEjecutar" class="btn-submit" onclick="procesarCorte()">

@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     OLT_PASS: str = "admin123"    # Contraseña SSH
 
     # Parámetros del Router MikroTik (Corte / Address List)
-    MIKROTIK_HOST: str = os.getenv("MIKROTIK_HOST", "45.71.202.181")  # IP de tu MikroTik
-    MIKROTIK_PORT: int = int(os.getenv("MIKROTIK_PORT", "22"))       # Puerto SSH
+    MIKROTIK_HOST: str = os.getenv("MIKROTIK_HOST", "172.25.57.1")  # IP de tu MikroTik
+    MIKROTIK_PORT: int = int(os.getenv("MIKROTIK_PORT", "2222"))       # Puerto SSH
     MIKROTIK_USER: str = os.getenv("MIKROTIK_USER", "Jessica")        # Usuario MikroTik
     MIKROTIK_PASS: str = os.getenv("MIKROTIK_PASS", "Jessica2025")     # Contraseña MikroTik
     MIKROTIK_ADDRESS_LIST: str = os.getenv("MIKROTIK_ADDRESS_LIST", "SUSPENDIDOS")

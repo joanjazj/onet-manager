@@ -167,46 +167,72 @@ def delete_ont(req: DeleteOntRequest):
 
 @app.post("/api/corte-masivo")
 async def procesar_corte_masivo(file: UploadFile = File(...)):
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel (.xlsx o .xls)")
+    filename = file.filename.lower()
+    
+    if not filename.endswith(('.csv', '.xlsx', '.xls')):
+        raise HTTPException(
+            status_code=400, 
+            detail="Formato no soportado. Debe subir un archivo .csv o .xlsx"
+        )
 
     try:
         contents = await file.read()
-        df = pd.read_excel(io.BytesIO(contents))
+        
+        if filename.endswith('.csv'):
+            # Detectar automáticamente si el separador es coma (,), punto y coma (;) o tabulación (\t)
+            df = pd.read_csv(io.BytesIO(contents), sep=None, engine='python', encoding='utf-8-sig')
+        else:
+            df = pd.read_excel(io.BytesIO(contents))
+            
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error al leer el archivo Excel: {str(e)}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Error al leer el archivo: {str(e)}"
+        )
 
-    # Verificar que existan las columnas requeridas (ajusta los nombres si difieren en tu plantilla)
-    columnas = [str(col).strip().upper() for col in df.columns]
-    df.columns = columnas
+    # Normalizar encabezados (quitar espacios y pasar a mayúsculas)
+    df.columns = [str(col).strip().upper() for col in df.columns]
 
-    if 'IP' not in df.columns or 'CLIENTE' not in df.columns:
-        raise HTTPException(status_code=400, detail="El Excel debe contener las columnas 'IP' y 'CLIENTE'")
+    # Mapeo de alias para identificar la columna del nombre/cliente
+    columna_cliente = None
+    posibles_nombres_cliente = ['CLIENTE', 'NOMBRE', 'NOMBRE CLIENTE', 'SUSCRIPTOR', 'RAZON SOCIAL']
+    
+    for alias in posibles_nombres_cliente:
+        if alias in df.columns:
+            columna_cliente = alias
+            break
+
+    # Validar presencia de columna IP y alguna variación de Nombre/Cliente
+    if 'IP' not in df.columns or not columna_cliente:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"El archivo debe contener al menos una columna 'IP' y una columna de nombre/cliente (Detectadas: {list(df.columns)})"
+        )
 
     datos_procesados = []
     for _, row in df.iterrows():
         ip = str(row['IP']).strip()
-        nombre_raw = str(row['CLIENTE']) if pd.notna(row['CLIENTE']) else ""
-        
+        nombre_raw = str(row[columna_cliente]) if pd.notna(row[columna_cliente]) else ""
+
+        # Ignorar filas vacías o nulas
         if ip and ip.lower() != 'nan':
             nombre_limpio = sanitizar_texto(nombre_raw)
             datos_procesados.append({'ip': ip, 'nombre': nombre_limpio})
 
     if not datos_procesados:
-        raise HTTPException(status_code=400, detail="No se encontraron registros válidos en el archivo")
+        raise HTTPException(
+            status_code=400, 
+            detail="No se encontraron registros válidos de IP y Cliente en el archivo"
+        )
 
-    # Ejecutar en el RouterBOARD MikroTik
-    res = aplicar_corte_mikrotik(
-        host=MIKROTIK_HOST,
-        username=MIKROTIK_USER,
-        password=MIKROTIK_PASS,
-        port=MIKROTIK_PORT,
-        datos_corte=datos_procesados,
-        list_name="MOROSOS"
-    )
+    # Aplicar comandos en bloque en MikroTik
+    res = aplicar_corte_mikrotik(datos_corte=datos_procesados)
 
     if res["status"] == "error":
-        raise HTTPException(status_code=500, detail=f"Error al conectar con MikroTik: {res['message']}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al aplicar en MikroTik: {res['message']}"
+        )
 
     return {"status": "ok", "procesados": res["ejecutados"]}
 
