@@ -139,6 +139,9 @@
 
         .btn-action { background: #2563eb; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-action:hover { background: #1d4ed8; }
+
+        .btn-warning {background-color: #f59e0b; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: background-color 0.2s;}
+        .btn-warning:hover {background-color: #d97706;}
         
         .btn-danger { background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
         .btn-danger:hover { background: #dc2626; }
@@ -260,6 +263,7 @@
                             <td><code>${ont.ip}</code></td>
                             <td><span class="badge ${badgeClass}">${statusText}</span></td>
                             <td>
+                                <button class="btn-warning" onclick="changeDescriptionDirect(${f}, ${s}, ${p}, ${id}, '${cleanClient}')"><i class="fa-solid fa-pen-to-square"></i> Editar Desc</button>
                                 <button class="btn-action" onclick="changePlanDirect(${f}, ${s}, ${p}, ${id}, '${cleanClient}')"><i class="fa-solid fa-sliders"></i> Cambiar Plan</button>
                                 <button class="btn-danger" onclick="deleteOntDirect(${f}, ${s}, ${p}, ${id}, '${cleanClient}')"><i class="fa-solid fa-trash"></i> Borrar</button>
                             </td>
@@ -478,6 +482,89 @@
                     text: 'Ocurrió un fallo al conectar con el servidor backend.',
                     icon: 'error',
                     confirmButtonColor: '#dc3545'
+                });
+            }
+        }
+
+        async function changeDescriptionDirect(frame, slot, port, ontId, currentDescription) {
+            // 1. Desplegar modal interactivo con SweetAlert2 para ingresar el nuevo alias/nombre
+            const { value: newDescription } = await Swal.fire({
+                title: 'Cambiar Descripción de ONT',
+                html: `
+                    <div class="text-start mb-2" style="font-size: 0.9rem;">
+                        <p class="mb-1"><strong>Posición OLT:</strong> ${frame}/${slot}/${port} (ID: ${ontId})</p>
+                        <p class="mb-0"><strong>Descripción Actual:</strong> <code>${currentDescription}</code></p>
+                    </div>
+                `,
+                input: 'text',
+                inputLabel: 'Ingrese el nuevo nombre o alias para la ONT:',
+                inputValue: currentDescription,
+                showCancelButton: true,
+                confirmButtonText: '<i class="fa-solid fa-floppy-disk"></i> Guardar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#64748b',
+                inputValidator: (value) => {
+                    if (!value || !value.trim()) {
+                        return 'La descripción no puede estar vacía.';
+                    }
+                }
+            });
+
+            if (!newDescription) return;
+
+            // 2. Mostrar indicador de carga mientras Telnet aplica el cambio en la OLT Huawei
+            Swal.fire({
+                title: 'Actualizando Descripción...',
+                text: 'Modificando alias de la ONT en la OLT',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const payload = {
+                frame: parseInt(frame),
+                slot: parseInt(slot),
+                port: parseInt(port),
+                ont_id: parseInt(ontId),
+                description: newDescription.trim()
+            };
+
+            try {
+                const res = await fetch('/api/v1/onts/change-description', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.status === "success") {
+                    await Swal.fire({
+                        title: '¡Actualizado!',
+                        text: 'La descripción se modificó correctamente en la OLT.',
+                        icon: 'success',
+                        confirmButtonColor: '#2563eb'
+                    });
+
+                    if (typeof loadRegisteredOnts === 'function') {
+                        loadRegisteredOnts();
+                    }
+                } else {
+                    Swal.fire({
+                        title: 'Error al cambiar descripción',
+                        text: data.detail || 'No se pudo aplicar la modificación.',
+                        icon: 'error',
+                        confirmButtonColor: '#dc2626'
+                    });
+                }
+            } catch (err) {
+                Swal.fire({
+                    title: 'Error de red',
+                    text: 'Ocurrió un error al conectar con el backend.',
+                    icon: 'error',
+                    confirmButtonColor: '#dc2626'
                 });
             }
         }

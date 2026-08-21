@@ -272,3 +272,29 @@ class HuaweiOLT:
         except Exception as e:
             logger.error(f"Error Telnet en delete_ont: {e}")
             return False, str(e)
+
+    def change_ont_description(self, frame: int, slot: int, port: int, ont_id: int, new_description: str):
+        try:
+            # Formatear la descripción: reemplaza espacios por guiones bajos y pasa a mayúsculas
+            clean_desc = new_description.strip().replace(" ", "_").upper()
+
+            commands = [
+                f"interface gpon {frame}/{slot}",
+                f'ont modify {port} {ont_id} desc "{clean_desc}"',
+                "quit",
+                "save"
+            ]
+
+            logger.info(f"[CHANGE_DESC] Enviando comandos a OLT para {frame}/{slot}/{port} ONT {ont_id}: {commands}")
+
+            output = self._execute_telnet_session(commands)
+            logger.info(f"[CHANGE_DESC] Salida OLT cambio descripción:\n{output}")
+
+            if "Error" in output or "Failure" in output or "Unknown command" in output:
+                return False, output.strip()
+
+            return True, "Descripción actualizada correctamente en la OLT"
+
+        except Exception as e:
+            logger.error(f"Error Telnet en change_ont_description: {e}")
+            return False, str(e)

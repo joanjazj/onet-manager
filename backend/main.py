@@ -107,6 +107,13 @@ class DeleteOntRequest(BaseModel):
     ont_id: int
     vlan: Optional[int] = 100
 
+class ChangeDescriptionRequest(BaseModel):
+    frame: int
+    slot: int
+    port: int
+    ont_id: int
+    description: str
+
 # Endpoint para cambiar plan de velocidad (traffic-table)
 @app.post("/api/v1/onts/change-plan")
 def change_plan(req: ChangePlanRequest):
@@ -242,3 +249,25 @@ def test_mikrotik():
     if res["status"] == "error":
         raise HTTPException(status_code=500, detail=f"Fallo de conexión: {res['message']}")
     return res
+
+@app.post("/api/v1/onts/change-description")
+def change_description_endpoint(req: ChangeDescriptionRequest):
+    try:
+        # Instanciación explícita con los parámetros de configuración
+        olt = HuaweiOLT(settings.OLT_HOST, settings.OLT_USER, settings.OLT_PASS, settings.OLT_PORT)
+        
+        success, output = olt.change_ont_description(
+            frame=req.frame,
+            slot=req.slot,
+            port=req.port,
+            ont_id=req.ont_id,
+            new_description=req.description
+        )
+        
+        if not success:
+            raise HTTPException(status_code=400, detail=output)
+            
+        return {"status": "success", "message": output}
+    except Exception as e:
+        logger.error(f"Error al cambiar descripción de ONT: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
