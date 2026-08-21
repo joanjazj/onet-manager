@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corte Masivo MikroTik</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { padding: 30px; background-color: #f8fafc; color: #334155; }
+        .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 24px; max-width: 800px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .card-header i { font-size: 1.5rem; color: #ef4444; }
+        .card-header h2 { font-size: 1.2rem; font-weight: 600; }
+        .drop-zone { border: 2px dashed #cbd5e1; border-radius: 8px; padding: 30px; text-align: center; background: #f8fafc; cursor: pointer; transition: 0.2s; }
+        .drop-zone:hover { border-color: #2563eb; background: #eff6ff; }
+        .drop-zone i { font-size: 2.5rem; color: #64748b; margin-bottom: 10px; }
+        .file-input { display: none; }
+        .btn-submit { background-color: #ef4444; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 20px; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-submit:hover { background-color: #dc2626; }
+        .btn-submit:disabled { background-color: #94a3b8; cursor: not-allowed; }
+        .alert { margin-top: 20px; padding: 14px; border-radius: 6px; font-size: 0.9rem; }
+        .alert-success { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .alert-danger { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+        .file-info { margin-top: 10px; font-weight: 500; font-size: 0.85rem; color: #2563eb; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="card-header">
+            <i class="fa-solid fa-file-excel"></i>
+            <h2>Procesar Corte Masivo de Clientes (MikroTik)</h2>
+        </div>
+
+        <p style="margin-bottom: 20px; font-size: 0.9rem; color: #64748b;">
+            Sube el archivo Excel con las columnas <strong>IP</strong> y <strong>CLIENTE</strong>. El sistema formateará los nombres a mayúsculas, eliminará tildes y aplicará la regla en el firewall del MikroTik automáticamente.
+        </p>
+
+        <div class="drop-zone" onclick="document.getElementById('excelFile').click()">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <p>Haz clic para seleccionar o arrastra aquí tu archivo Excel (.xlsx)</p>
+            <div id="fileName" class="file-info"></div>
+            <input type="file" id="excelFile" class="file-input" accept=".xlsx, .xls" onchange="mostrarNombreArchivo()">
+        </div>
+
+        <button id="btnEjecutar" class="btn-submit" onclick="procesarCorte()">
+            <i class="fa-solid fa-bolt"></i> Ejecutar Corte en RouterOS
+        </button>
+
+        <div id="resultado"></div>
+    </div>
+
+    <script>
+        function mostrarNombreArchivo() {
+            const input = document.getElementById('excelFile');
+            const fileNameDiv = document.getElementById('fileName');
+            if (input.files.length > 0) {
+                fileNameDiv.textContent = `Archivo seleccionado: ${input.files[0].name}`;
+            }
+        }
+
+        async function procesarCorte() {
+            const input = document.getElementById('excelFile');
+            const btn = document.getElementById('btnEjecutar');
+            const resDiv = document.getElementById('resultado');
+
+            if (!input.files.length) {
+                alert("Por favor sube un archivo Excel válido.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', input.files[0]);
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando comandos en MikroTik...';
+            resDiv.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/corte-masivo', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="fa-solid fa-check-circle"></i> 
+                            <strong>¡Corte completado con éxito!</strong> Se agregaron ${data.procesados} clientes a la lista de corte en MikroTik.
+                        </div>`;
+                } else {
+                    resDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fa-solid fa-triangle-exclamation"></i> 
+                            <strong>Error:</strong> ${data.detail}
+                        </div>`;
+                }
+            } catch (err) {
+                resDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fa-solid fa-triangle-exclamation"></i> 
+                        <strong>Error de red:</strong> No se pudo conectar con el servidor backend.
+                    </div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-bolt"></i> Ejecutar Corte en RouterOS';
+            }
+        }
+    </script>
+</body>
+</html>

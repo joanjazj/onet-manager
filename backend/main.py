@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from config import settings
@@ -7,6 +7,9 @@ from olt_service import HuaweiOLT
 from typing import Optional
 from zabbix_service import ZabbixService
 import logging
+import io
+import pandas as pd
+from mikrotik_service import sanitizar_texto, aplicar_corte_mikrotik, probar_conexion_mikrotik
 
 
 logging.basicConfig(level=logging.INFO)
@@ -161,3 +164,55 @@ def delete_ont(req: DeleteOntRequest):
     except Exception as e:
         logger.error(f"Error al eliminar ONT: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/corte-masivo")
+async def procesar_corte_masivo(file: UploadFile = File(...)):
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un Excel (.xlsx o .xls)")
+
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al leer el archivo Excel: {str(e)}")
+
+    # Verificar que existan las columnas requeridas (ajusta los nombres si difieren en tu plantilla)
+    columnas = [str(col).strip().upper() for col in df.columns]
+    df.columns = columnas
+
+    if 'IP' not in df.columns or 'CLIENTE' not in df.columns:
+        raise HTTPException(status_code=400, detail="El Excel debe contener las columnas 'IP' y 'CLIENTE'")
+
+    datos_procesados = []
+    for _, row in df.iterrows():
+        ip = str(row['IP']).strip()
+        nombre_raw = str(row['CLIENTE']) if pd.notna(row['CLIENTE']) else ""
+        
+        if ip and ip.lower() != 'nan':
+            nombre_limpio = sanitizar_texto(nombre_raw)
+            datos_procesados.append({'ip': ip, 'nombre': nombre_limpio})
+
+    if not datos_procesados:
+        raise HTTPException(status_code=400, detail="No se encontraron registros válidos en el archivo")
+
+    # Ejecutar en el RouterBOARD MikroTik
+    res = aplicar_corte_mikrotik(
+        host=MIKROTIK_HOST,
+        username=MIKROTIK_USER,
+        password=MIKROTIK_PASS,
+        port=MIKROTIK_PORT,
+        datos_corte=datos_procesados,
+        list_name="MOROSOS"
+    )
+
+    if res["status"] == "error":
+        raise HTTPException(status_code=500, detail=f"Error al conectar con MikroTik: {res['message']}")
+
+    return {"status": "ok", "procesados": res["ejecutados"]}
+
+@app.get("/api/test-mikrotik")
+def test_mikrotik():
+    res = probar_conexion_mikrotik()
+    if res["status"] == "error":
+        raise HTTPException(status_code=500, detail=f"Fallo de conexión: {res['message']}")
+    return res
