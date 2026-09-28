@@ -69,3 +69,109 @@ def probar_conexion_mikrotik():
         return {"status": "ok", "message": "Conexión exitosa", "resource": output}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+def reactivar_cliente_mikrotik(ip: str):
+    device = {
+        'device_type': 'mikrotik_routeros',
+        'host': settings.MIKROTIK_HOST,
+        'username': settings.MIKROTIK_USER,
+        'password': settings.MIKROTIK_PASS,
+        'port': getattr(settings, 'MIKROTIK_PORT', 22),
+    }
+
+    address_list = getattr(settings, 'MIKROTIK_ADDRESS_LIST', 'SUSPENDIDOS')
+
+    # 1. Comando para verificar si la IP está suspendida
+    cmd_print = f'/ip firewall address-list print count-only where list="{address_list}" and address="{ip}"'
+    # 2. Comando para remover
+    cmd_remove = f'/ip firewall address-list remove [find where list="{address_list}" and address="{ip}"]'
+
+    try:
+        net_connect = ConnectHandler(**device)
+        
+        # Ejecutar conteo
+        count_output = net_connect.send_command(cmd_print).strip()
+        
+        # Si count_output es mayor a 0, la IP sí está en la lista
+        if count_output.isdigit() and int(count_output) > 0:
+            output_remove = net_connect.send_command(cmd_remove)
+            net_connect.disconnect()
+            return {
+                "status": "success",
+                "was_suspended": True,
+                "ip": ip,
+                "message": f"IP {ip} reconectada exitosamente."
+            }
+        else:
+            net_connect.disconnect()
+            return {
+                "status": "success",
+                "was_suspended": False,
+                "ip": ip,
+                "message": f"La IP {ip} no se encontraba suspendida."
+            }
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+def obtener_clientes_suspendidos_mikrotik():
+    device = {
+        'device_type': 'mikrotik_routeros',
+        'host': settings.MIKROTIK_HOST,
+        'username': settings.MIKROTIK_USER,
+        'password': settings.MIKROTIK_PASS,
+        'port': getattr(settings, 'MIKROTIK_PORT', 22),
+    }
+
+    address_list = getattr(settings, 'MIKROTIK_ADDRESS_LIST', 'SUSPENDIDOS')
+    
+    cmd_list = f'/ip firewall address-list print terse without-paging where list="{address_list}"'
+
+    try:
+        net_connect = ConnectHandler(**device)
+        output = net_connect.send_command(cmd_list)
+        net_connect.disconnect()
+
+        clientes = []
+        for line in output.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            
+            # 1. Extraer IP
+            ip_match = re.search(r'address=([^\s]+)', line)
+            
+            # 2. Extraer comentario (captura entre comillas O hasta el siguiente atributo clave=valor)
+            comment_match = re.search(r'comment="([^"]+)"|comment=(.*?)(?=\s+[a-zA-Z0-9-]+=|$)', line)
+            
+            # 3. Extraer creation-time
+            creation_match = re.search(r'creation-time="([^"]+)"|creation-time=([^\s]+)', line)
+
+            if ip_match:
+                ip = ip_match.group(1)
+                
+                comment = ""
+                if comment_match:
+                    # Toma el valor entre comillas (grupo 1) o el valor sin comillas extenso (grupo 2)
+                    comment = comment_match.group(1) or comment_match.group(2) or ""
+                    comment = comment.strip()
+
+                creation_time = ""
+                if creation_match:
+                    creation_time = creation_match.group(1) or creation_match.group(2) or ""
+
+                clientes.append({
+                    "ip": ip,
+                    "comment": comment,
+                    "created_at": creation_time
+                })
+
+        return {
+            "status": "success",
+            "total": len(clientes),
+            "data": clientes
+        }
+
+    except Exception as e:
+        return {"status": "error", "message": str(e), "data": []}

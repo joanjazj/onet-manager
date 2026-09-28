@@ -9,7 +9,7 @@ from zabbix_service import ZabbixService
 import logging
 import io
 import pandas as pd
-from mikrotik_service import sanitizar_texto, aplicar_corte_mikrotik, probar_conexion_mikrotik
+from mikrotik_service import sanitizar_texto, aplicar_corte_mikrotik, probar_conexion_mikrotik, reactivar_cliente_mikrotik, obtener_clientes_suspendidos_mikrotik
 
 
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +48,8 @@ class FullProvisionRequest(BaseModel):
     plan: str  # Ej: "100M", "200M", "300M"
     vlan: int = settings.DEFAULT_VLAN
 
+class ReactivarClienteRequest(BaseModel):
+    ip: str
 
 # -------------------------------------------------------------------
 # ENDPOINTS DE LA API
@@ -271,3 +273,17 @@ def change_description_endpoint(req: ChangeDescriptionRequest):
     except Exception as e:
         logger.error(f"Error al cambiar descripción de ONT: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/reactivar-cliente")
+def endpoint_reactivar_cliente(datos: ReactivarClienteRequest):
+    resultado = reactivar_cliente_mikrotik(datos.ip)
+    if resultado["status"] == "error":
+        raise HTTPException(status_code=500, detail=resultado["message"])
+    return resultado
+
+@app.get("/api/v1/clientes-suspendidos")
+def endpoint_obtener_suspendidos():
+    resultado = obtener_clientes_suspendidos_mikrotik()
+    if resultado["status"] == "error":
+        raise HTTPException(status_code=500, detail=resultado["message"])
+    return resultado
