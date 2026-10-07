@@ -99,7 +99,7 @@ services:
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:Dajomal1209Ing.@evolution_db:5432/evolution?schema=public
       - DATABASE_SAVE_DATA_INSTANCE=true
-      - DATABASE_SAVE_DATA_NEW_MESSAGE=false
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
       - DATABASE_SAVE_MESSAGE_HEADER=false
     volumes:
       - evolution_instances:/evolution/instances
