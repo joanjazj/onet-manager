@@ -43,17 +43,16 @@ class ZabbixService:
             "jsonrpc": "2.0",
             "method": "item.get",
             "params": {
-                "output": ["itemid", "name", "key_", "snmp_oid", "lastvalue"],
-                "search": {
-                    "name": "ONTB-"
-                },
-                "searchByAny": True
+                "output": ["itemid", "hostid", "name", "key_", "snmp_oid", "lastvalue", "lastclock"],
+                "search": {"name": "ONTB-"},
+                "monitored": True,
+                "filter": {"state": 0}
             },
             "id": 1
         }
 
         try:
-            response = requests.post(self.url, json=payload, headers=headers, timeout=20)
+            response = requests.post(self.url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
 
@@ -69,6 +68,10 @@ class ZabbixService:
                 item_key = item.get("key_", "")
                 snmp_oid = item.get("snmp_oid", "")
                 last_val = item.get("lastvalue", "N/A")
+
+                ts = int(item.get("lastclock") or 0)
+                if ts == 0:
+                    continue  # item que nunca polleó (host fantasma)
 
                 is_ip_item = "IP ONT:" in raw_name
                 is_ping_item = "ICMP Ping:" in raw_name
@@ -97,7 +100,8 @@ class ZabbixService:
                 # Buscar SNMP Index en snmp_oid, key_ o name
                 # Ejemplo de OID: .1.3.6.1.4.1.2011.6.128.1.1.2.43.1.9.4194312192.2
                 combined_text = f"{snmp_oid} {item_key} {raw_name}"
-                
+
+                                
                 # Busca cualquier patrón del tipo 4194XXXXXX.Y
                 idx_match = re.search(r'(\d{9,10}\.\d+)', combined_text)
                 if idx_match:
@@ -108,10 +112,19 @@ class ZabbixService:
                     onts_map[client_id]["port"] = p
                     onts_map[client_id]["ont_id"] = ont_id
 
+                kind = "ip" if is_ip_item else "status"
+                seen = onts_map[client_id].setdefault("_ts", {})
+                if ts < seen.get(kind, 0):
+                    continue
+                seen[kind] = ts
+
                 if is_ip_item:
                     onts_map[client_id]["ip"] = last_val
                 elif is_ping_item:
                     onts_map[client_id]["status"] = last_val
+
+            for o in onts_map.values():
+                o.pop("_ts", None)
 
             return list(onts_map.values())
 
