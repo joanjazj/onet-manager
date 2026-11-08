@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     # Parámetros de la OLT Huawei MA5800
     OLT_HOST: str = "172.31.31.2"       # IP de gestión de tu OLT
     OLT_PORT: int = 23
-    OLT_USER: str = "root"              # Usuario SSH
-    OLT_PASS: str = "admin123"    # Contraseña SSH
+    OLT_USER: str = "api_user"              # Usuario SSH
+    OLT_PASS: str = "api_user123"    # Contraseña SSH
 
     # Parámetros del Router MikroTik (Corte / Address List)
     MIKROTIK_HOST: str = os.getenv("MIKROTIK_HOST", "172.25.57.1")  # IP de tu MikroTik
